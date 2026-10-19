@@ -114,7 +114,7 @@ const commandExists = Effect.fn("commandExists")(function* (command: string) {
 
 const warnMissingTool = (tool: NativeStaticTool, checkName: string) =>
   Effect.logWarning(
-    `${tool.command} is not installed; skipping ${checkName}. Install it with '${tool.installHint}' or run 'brew bundle install --file apps/mobile/Brewfile'.`,
+    `${tool.command} is not installed; skipping ${checkName}. Install it with '${tool.installHint}'.`,
   );
 
 export const runCommand = Effect.fn("runCommand")(function* (
@@ -230,6 +230,26 @@ export function collectSources(
 const runNativeStaticChecks = Effect.fn("runNativeStaticChecks")(function* () {
   const path = yield* Path.Path;
   const root = yield* appRoot;
+  const fs = yield* FileSystem.FileSystem;
+
+  // Not every checkout vendors the mobile app. With no sources to lint there
+  // is nothing to report, so the check succeeds instead of failing on a
+  // missing directory.
+  const rootExists = yield* fs.exists(root).pipe(
+    Effect.mapError(
+      (cause) =>
+        new NativeStaticCheckSourceDiscoveryError({
+          operation: "stat-entry",
+          path: root,
+          cause,
+        }),
+    ),
+  );
+  if (!rootExists) {
+    yield* Console.log(`No mobile app at ${root}; skipping native static analysis.`);
+    return;
+  }
+
   const sources = yield* collectSources(root, root);
   const swiftSources = sources.filter((source) => path.extname(source) === ".swift");
   const kotlinSources = sources.filter((source) => {

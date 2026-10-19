@@ -9,19 +9,15 @@ import * as Effect from "effect/Effect";
 
 const repoRoot = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
 
-const workspaceFiles = [
+// Manifests the smoke fixture cannot run without. A missing one is a real
+// regression, so the copy fails loudly.
+const requiredWorkspaceFiles = [
   "package.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   "apps/server/package.json",
   "apps/desktop/package.json",
   "apps/web/package.json",
-  "apps/mobile/package.json",
-  "apps/mobile/deps/react-native-nitro-markdown-0.5.0.tgz",
-  "apps/mobile/modules/t3-markdown-text/package.json",
-  "apps/mobile/modules/t3-review-diff/package.json",
-  "apps/mobile/modules/t3-terminal/package.json",
-  "apps/marketing/package.json",
   "infra/relay/package.json",
   "oxlint-plugin-paralla/package.json",
   "packages/client-runtime/package.json",
@@ -34,9 +30,27 @@ const workspaceFiles = [
   "scripts/package.json",
 ] as const;
 
+// Manifests for workspaces this fork does not vendor. They are copied when
+// present and skipped when absent, so the fixture matches whatever the
+// repository actually contains instead of assuming upstream's layout.
+const optionalWorkspaceFiles = [
+  "apps/mobile/package.json",
+  "apps/mobile/deps/react-native-nitro-markdown-0.5.0.tgz",
+  "apps/mobile/modules/t3-markdown-text/package.json",
+  "apps/mobile/modules/t3-review-diff/package.json",
+  "apps/mobile/modules/t3-terminal/package.json",
+  "apps/marketing/package.json",
+] as const;
+
 function copyWorkspaceManifestFixture(targetRoot: string): void {
-  for (const relativePath of workspaceFiles) {
+  for (const relativePath of [...requiredWorkspaceFiles, ...optionalWorkspaceFiles]) {
     const sourcePath = NodePath.resolve(repoRoot, relativePath);
+    if (!NodeFS.existsSync(sourcePath)) {
+      if ((requiredWorkspaceFiles as ReadonlyArray<string>).includes(relativePath)) {
+        throw new Error(`Missing required workspace fixture file: ${relativePath}`);
+      }
+      continue;
+    }
     const destinationPath = NodePath.resolve(targetRoot, relativePath);
     NodeFS.mkdirSync(NodePath.dirname(destinationPath), { recursive: true });
     NodeFS.cpSync(sourcePath, destinationPath);
